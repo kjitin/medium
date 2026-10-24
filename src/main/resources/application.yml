@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: bff-gateway
+
+  # Redis for session storage
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+  session:
+    store-type: redis
+    timeout: 1800s  # 30 minutes
+
+  # OAuth2 client registration
+  security:
+    oauth2:
+      client:
+        provider:
+          keycloak:
+            issuer-uri: https://keycloak.example.com/realms/my-realm
+            user-name-attribute: preferred_username
+
+        registration:
+          keycloak:
+            provider: keycloak
+            client-id: bff-gateway
+            client-secret: your-client-secret-here
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            scope:
+              - openid
+              - profile
+              - email
+              - offline_access  # for refresh tokens
+
+  # Cloud Gateway routes
+  cloud:
+    gateway:
+      default-filters:
+        - SaveSession           # persist session with tokens
+        - DedupeResponseHeader=Access-Control-Allow-Origin
+
+      routes:
+        # Route 1: Proxy to Resource Server (API)
+        - id: api-resource-server
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/**
+          filters:
+            - TokenRelay=          # inject access token from session
+            - StripPrefix=1         # /api/orders → /orders
+
+        # Route 2: Serve React SPA
+        - id: spa-ui
+          uri: http://localhost:3000
+          predicates:
+            - Path=/ui/**
+
+# Server config
+server:
+  port: 8080
+
+# Logging
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.security: DEBUG
